@@ -174,6 +174,17 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       <div class="space-y-3" id="queryGroups"></div>
     </div>
 
+    <!-- Run button (only shown when server is available) -->
+    <div id="run-section" class="px-5 py-4 border-b border-neutral-100 hidden">
+      <p class="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-3">Fetch new results</p>
+      <p class="text-xs text-neutral-400 mb-3">Re-run the fetcher using only the selected search terms above.</p>
+      <button id="run-btn" onclick="runFetch()"
+        class="w-full text-sm font-semibold bg-black text-white rounded-lg py-2.5 hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2">
+        <span id="run-label">Run selected queries</span>
+      </button>
+      <p id="run-status" class="text-xs text-neutral-400 text-center mt-2 hidden"></p>
+    </div>
+
     <div class="px-5 py-4">
       <button onclick="resetSettings()"
         class="w-full text-xs text-neutral-400 hover:text-black border border-neutral-200 hover:border-black rounded-lg py-2 transition-colors">
@@ -366,6 +377,101 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       document.getElementById('distVal').textContent = e.target.value;
       filter();
     }});
+
+    // Detect server and show run button
+    let serverAvailable = false;
+    let pollInterval = null;
+    const API = window.location.protocol === 'file:' ? 'http://localhost:5001' : '';
+
+    fetch(API + '/api/status').then(r => r.json()).then(() => {{
+      serverAvailable = true;
+      document.getElementById('run-section').classList.remove('hidden');
+    }}).catch(() => {{}});
+
+    function runFetch() {{
+      if (!serverAvailable) return;
+      const queries = [...activeQueries];
+      if (queries.length === 0) {{
+        alert('Select at least one search term.');
+        return;
+      }}
+      const btn = document.getElementById('run-btn');
+      const label = document.getElementById('run-label');
+      const status = document.getElementById('run-status');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      label.textContent = 'Fetching…';
+      status.textContent = `Running ${{queries.length}} quer${{queries.length === 1 ? 'y' : 'ies'}}…`;
+      status.classList.remove('hidden');
+
+      fetch(API + '/api/run', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{ queries }})
+      }}).then(r => r.json()).then(() => {{
+        pollInterval = setInterval(checkDone, 2000);
+      }}).catch(() => {{
+        label.textContent = 'Run selected queries';
+        status.textContent = 'Error starting run.';
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }});
+    }}
+
+    function checkDone() {{
+      fetch(API + '/api/status').then(r => r.json()).then(data => {{
+        if (!data.running) {{
+          clearInterval(pollInterval);
+          fetch(API + '/api/results').then(r => r.json()).then(results => {{
+            // merge new results into ALL, preserving likes
+            ALL.length = 0;
+            results.forEach((d, i) => {{
+              const pics = d.pictures || [];
+              ALL.push({{
+                rank: i + 1,
+                score: d._score,
+                title: d.title || '',
+                description: (d.description || '').slice(0, 200),
+                price: formatPrice(d),
+                priceCents: (d.priceInfo || {{}}).priceCents || 0,
+                priceType: (d.priceInfo || {{}}).priceType || 'FIXED',
+                distance: formatDist(d),
+                distanceMeters: (d.location || {{}}).distanceMeters || 99999,
+                city: (d.location || {{}}).cityName || '',
+                url: 'https://www.marktplaats.nl' + (d.vipUrl || ''),
+                thumb: pics.length ? pics[0].mediumUrl || '' : '',
+                date: d.date || '',
+                seller: (d.sellerInformation || {{}}).sellerName || '',
+                query: d._query || '',
+              }});
+            }});
+            const label = document.getElementById('run-label');
+            const status = document.getElementById('run-status');
+            const btn = document.getElementById('run-btn');
+            label.textContent = 'Run selected queries';
+            status.textContent = `Done — ${{ALL.length}} results loaded.`;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            activeQueries = new Set(ALL.map(d => d.query));
+            buildQueryGroups();
+            filter();
+          }});
+        }}
+      }});
+    }}
+
+    function formatPrice(d) {{
+      const info = d.priceInfo || {{}};
+      const cents = info.priceCents || 0;
+      if (info.priceType === 'FAST_BID' && cents === 0) return '€0 (bid)';
+      if (info.priceType === 'MIN_BID') return `€${{Math.floor(cents/100)}} (bod)`;
+      return `€${{Math.floor(cents/100)}}`;
+    }}
+
+    function formatDist(d) {{
+      const m = (d.location || {{}}).distanceMeters || 0;
+      return m >= 1000 ? `${{(m/1000).toFixed(1)}}km` : `${{m}}m`;
+    }}
 
     buildQueryGroups();
     saveLikes();
