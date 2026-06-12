@@ -7,7 +7,7 @@ REQUEST_DELAY = 1.5  # seconds between API calls
 
 QUERIES = [
     "opknapper", "defect", "kapot", "niet werkend",
-    "zolder opruiming", "mag weg", "gratis ophalen",
+    "zolder opruiming", "mag weg", "gratis ophalen", "gratis",
     "vintage", "retro", "industrieel", "teak", "Deens design",
     "jaren 60", "jaren 70", "antiek",
 ]

@@ -196,7 +196,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
 
     // Query groups for settings panel
     const QUERY_GROUPS = [
-      {{ label: 'Urgency', queries: ['mag weg', 'zolder opruiming', 'gratis ophalen'] }},
+      {{ label: 'Urgency', queries: ['mag weg', 'zolder opruiming', 'gratis ophalen', 'gratis'] }},
       {{ label: 'Condition', queries: ['opknapper', 'defect', 'kapot', 'niet werkend'] }},
       {{ label: 'Style', queries: ['vintage', 'retro', 'industrieel', 'Deens design'] }},
       {{ label: 'Material', queries: ['teak', 'antiek'] }},
