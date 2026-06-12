@@ -56,49 +56,62 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     data_json = json.dumps(data, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
-<html lang="nl" class="bg-white text-black">
+<html lang="nl">
 <head>
   <meta charset="utf-8">
   <title>Marktplaats Treasure Finder</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {{
+      theme: {{
+        extend: {{
+          fontFamily: {{
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Segoe UI"', 'sans-serif'],
+          }}
+        }}
+      }}
+    }}
+  </script>
   <style>
     input[type=range] {{ accent-color: black; }}
+    .line-clamp-2 {{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
+    .line-clamp-3 {{ display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }}
   </style>
 </head>
-<body class="min-h-screen bg-white text-black font-sans">
+<body class="min-h-screen bg-neutral-100 text-black font-sans antialiased">
 
   <!-- Header -->
-  <header class="border-b border-black px-6 py-4 flex items-center justify-between">
-    <h1 class="text-sm font-semibold tracking-widest uppercase">Marktplaats Treasure Finder</h1>
-    <span id="count" class="text-xs text-neutral-400"></span>
+  <header class="bg-white/80 backdrop-blur sticky top-0 z-10 border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
+    <h1 class="text-sm font-semibold tracking-tight">Treasure Finder</h1>
+    <span id="count" class="text-xs text-neutral-400 tabular-nums"></span>
   </header>
 
   <!-- Controls -->
-  <div class="border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-4 items-center bg-white">
+  <div class="bg-white border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-3 items-center">
     <input
       id="search"
       type="text"
-      placeholder="Search..."
-      class="flex-1 min-w-48 text-sm border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-black"
+      placeholder="Search listings..."
+      class="flex-1 min-w-48 text-sm bg-neutral-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/10 placeholder:text-neutral-400"
     >
-    <select id="sort" class="text-sm border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-black bg-white">
-      <option value="score">Score</option>
+    <select id="sort" class="text-sm bg-neutral-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/10">
+      <option value="score">Best match</option>
       <option value="price_asc">Price: low to high</option>
       <option value="price_desc">Price: high to low</option>
-      <option value="distance">Distance</option>
+      <option value="distance">Nearest first</option>
     </select>
     <label class="text-xs text-neutral-500 flex items-center gap-2">
-      Max €<span id="priceVal" class="text-black font-medium">500</span>
+      Max €<span id="priceVal" class="text-black font-medium w-6 inline-block">500</span>
       <input type="range" id="maxPrice" min="0" max="500" step="5" value="500" class="w-24">
     </label>
     <label class="text-xs text-neutral-500 flex items-center gap-2">
-      Max <span id="distVal" class="text-black font-medium">10</span>km
+      <span id="distVal" class="text-black font-medium w-4 inline-block">10</span>km
       <input type="range" id="maxDist" min="1" max="10" step="1" value="10" class="w-20">
     </label>
   </div>
 
   <!-- Grid -->
-  <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-neutral-200 border-b border-neutral-200"></div>
+  <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6"></div>
 
   <script>
     const ALL = {data_json};
@@ -107,26 +120,26 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
 
     function render(items) {{
       if (items.length === 0) {{
-        grid.innerHTML = '<p class="col-span-full text-center text-neutral-400 text-sm py-20">No results.</p>';
+        grid.innerHTML = '<p class="col-span-full text-center text-neutral-400 text-sm py-24">No results found.</p>';
         countEl.textContent = '0 results';
         return;
       }}
       grid.innerHTML = items.map(d => {{
         const img = d.thumb
-          ? `<img src="${{d.thumb}}" loading="lazy" class="w-full h-44 object-cover bg-neutral-100" alt="">`
-          : `<div class="w-full h-44 bg-neutral-100 flex items-center justify-center text-neutral-300 text-3xl">—</div>`;
+          ? `<img src="${{d.thumb}}" loading="lazy" class="w-full h-48 object-cover" alt="">`
+          : `<div class="w-full h-48 bg-neutral-100 flex items-center justify-center text-neutral-300 text-4xl">—</div>`;
         return `
-          <a href="${{d.url}}" target="_blank" class="bg-white flex flex-col group hover:bg-neutral-50 transition-colors">
+          <a href="${{d.url}}" target="_blank"
+             class="bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200 group">
             ${{img}}
-            <div class="p-4 flex flex-col gap-2 flex-1">
-              <p class="text-xs font-semibold leading-snug line-clamp-2 group-hover:underline">${{d.title}}</p>
-              <p class="text-xs text-neutral-400 leading-relaxed line-clamp-2 flex-1">${{d.description}}</p>
-              <div class="flex items-center gap-2 flex-wrap pt-1">
-                <span class="text-xs font-bold tabular-nums">${{d.score}}</span>
-                <span class="text-xs text-neutral-400">·</span>
-                <span class="text-xs font-medium">${{d.price}}</span>
-                <span class="text-xs text-neutral-400">·</span>
-                <span class="text-xs text-neutral-500">${{d.distance}}</span>
+            <div class="p-5 flex flex-col gap-3 flex-1">
+              <p class="text-sm font-semibold leading-snug line-clamp-2 group-hover:underline decoration-1 underline-offset-2">${{d.title}}</p>
+              <p class="text-xs text-neutral-400 leading-relaxed line-clamp-3 flex-1">${{d.description}}</p>
+              <div class="flex items-center gap-1.5 pt-1 flex-wrap">
+                <span class="text-xs font-bold tabular-nums bg-black text-white px-2 py-0.5 rounded-full">${{d.score}}</span>
+                <span class="text-xs font-semibold text-neutral-700">${{d.price}}</span>
+                <span class="text-xs text-neutral-300">·</span>
+                <span class="text-xs text-neutral-400">${{d.distance}}</span>
                 <span class="text-xs text-neutral-300 ml-auto">${{d.date}}</span>
               </div>
             </div>
