@@ -44,6 +44,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             "description": listing.get("description", "")[:200],
             "price": _format_price(listing),
             "priceCents": listing.get("priceInfo", {}).get("priceCents", 0),
+            "priceType": listing.get("priceInfo", {}).get("priceType", "FIXED"),
             "distance": _format_distance(listing),
             "distanceMeters": listing.get("location", {}).get("distanceMeters", 99999),
             "city": listing.get("location", {}).get("cityName", ""),
@@ -51,6 +52,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             "thumb": pics[0].get("mediumUrl", "") if pics else "",
             "date": listing.get("date", ""),
             "seller": listing.get("sellerInformation", {}).get("sellerName", ""),
+            "query": listing.get("_query", ""),
         })
 
     data_json = json.dumps(data, ensure_ascii=False)
@@ -81,8 +83,8 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
 <body class="min-h-screen bg-neutral-100 text-black font-sans antialiased">
 
   <!-- Header -->
-  <header class="bg-white/80 backdrop-blur sticky top-0 z-10 border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
-    <h1 class="text-sm font-semibold tracking-tight">Treasure Finder</h1>
+  <header class="bg-white/80 backdrop-blur sticky top-0 z-10 border-b border-neutral-200 px-6 py-4 flex items-center gap-3">
+    <h1 class="text-sm font-semibold tracking-tight mr-2">Treasure Finder</h1>
     <div class="flex items-center gap-1">
       <button id="tab-all" onclick="setTab('all')"
         class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-black text-white">
@@ -93,10 +95,17 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
         Saved <span id="saved-count" class="ml-0.5"></span>
       </button>
     </div>
-    <span id="count" class="text-xs text-neutral-400 tabular-nums"></span>
+    <span id="count" class="text-xs text-neutral-400 tabular-nums ml-auto"></span>
+    <button onclick="toggleSettings()"
+      class="text-xs px-3 py-1.5 rounded-lg font-medium border border-neutral-200 hover:border-black transition-colors flex items-center gap-1.5">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5">
+        <path fill-rule="evenodd" d="M8.34 1.804A1 1 0 019.32 1h1.36a1 1 0 01.98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 011.262.125l.962.962a1 1 0 01.125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 01.804.98v1.361a1 1 0 01-.804.98l-1.473.295a6.95 6.95 0 01-.587 1.416l.834 1.25a1 1 0 01-.125 1.262l-.962.962a1 1 0 01-1.262.125l-1.25-.834a6.953 6.953 0 01-1.416.587l-.294 1.473a1 1 0 01-.98.804H9.32a1 1 0 01-.98-.804l-.295-1.473a6.957 6.957 0 01-1.416-.587l-1.25.834a1 1 0 01-1.262-.125l-.962-.962a1 1 0 01-.125-1.262l.834-1.25a6.957 6.957 0 01-.587-1.416l-1.473-.294A1 1 0 011 10.68V9.32a1 1 0 01.804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 01.125-1.262l.962-.962A1 1 0 015.38 3.03l1.25.834a6.957 6.957 0 011.416-.587L8.34 1.804zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+      </svg>
+      Filters
+    </button>
   </header>
 
-  <!-- Controls -->
+  <!-- Controls bar -->
   <div id="controls" class="bg-white border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-3 items-center">
     <input
       id="search"
@@ -120,6 +129,59 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     </label>
   </div>
 
+  <!-- Settings panel (slide-in from right) -->
+  <div id="settings-backdrop" onclick="toggleSettings()"
+    class="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 hidden"></div>
+  <aside id="settings-panel"
+    class="fixed top-0 right-0 h-full w-80 bg-white z-30 shadow-2xl overflow-y-auto translate-x-full transition-transform duration-300 ease-in-out">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+      <h2 class="text-sm font-semibold">Filters</h2>
+      <button onclick="toggleSettings()" class="text-neutral-400 hover:text-black transition-colors text-lg leading-none">×</button>
+    </div>
+
+    <!-- Min score -->
+    <div class="px-5 py-4 border-b border-neutral-100">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Min. score</p>
+        <span id="minScoreVal" class="text-sm font-bold">0</span>
+      </div>
+      <input type="range" id="minScore" min="0" max="90" step="5" value="0"
+        class="w-full" oninput="document.getElementById('minScoreVal').textContent=this.value; filter()">
+    </div>
+
+    <!-- Price type -->
+    <div class="px-5 py-4 border-b border-neutral-100">
+      <p class="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-3">Price type</p>
+      <div class="flex flex-col gap-2" id="priceTypeFilters">
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" value="FIXED" checked onchange="filter()" class="rounded"> Fixed price
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" value="MIN_BID" checked onchange="filter()" class="rounded"> Min. bid
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" value="FAST_BID" checked onchange="filter()" class="rounded"> Auction
+        </label>
+      </div>
+    </div>
+
+    <!-- Query categories -->
+    <div class="px-5 py-4 border-b border-neutral-100">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Search terms</p>
+        <button onclick="toggleAllQueries(true)" class="text-xs text-neutral-400 hover:text-black">All</button>
+      </div>
+      <div class="space-y-3" id="queryGroups"></div>
+    </div>
+
+    <div class="px-5 py-4">
+      <button onclick="resetSettings()"
+        class="w-full text-xs text-neutral-400 hover:text-black border border-neutral-200 hover:border-black rounded-lg py-2 transition-colors">
+        Reset all filters
+      </button>
+    </div>
+  </aside>
+
   <!-- Grid -->
   <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6"></div>
 
@@ -132,6 +194,67 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     let liked = new Set(JSON.parse(localStorage.getItem('tf_liked') || '[]'));
     let currentTab = 'all';
 
+    // Query groups for settings panel
+    const QUERY_GROUPS = [
+      {{ label: 'Urgency', queries: ['mag weg', 'zolder opruiming', 'gratis ophalen'] }},
+      {{ label: 'Condition', queries: ['opknapper', 'defect', 'kapot', 'niet werkend'] }},
+      {{ label: 'Style', queries: ['vintage', 'retro', 'industrieel', 'Deens design'] }},
+      {{ label: 'Material', queries: ['teak', 'antiek'] }},
+      {{ label: 'Era', queries: ['jaren 60', 'jaren 70'] }},
+    ];
+
+    let activeQueries = new Set(ALL.map(d => d.query));
+
+    function buildQueryGroups() {{
+      const container = document.getElementById('queryGroups');
+      container.innerHTML = QUERY_GROUPS.map(group => `
+        <div>
+          <p class="text-xs text-neutral-400 mb-1.5">${{group.label}}</p>
+          <div class="flex flex-wrap gap-1.5">
+            ${{group.queries.map(q => `
+              <button onclick="toggleQuery('${{q}}')" id="qtag-${{q.replace(/ /g,'_')}}"
+                class="text-xs px-2.5 py-1 rounded-full border border-neutral-200 bg-black text-white transition-colors">
+                ${{q}}
+              </button>`).join('')}}
+          </div>
+        </div>`).join('');
+    }}
+
+    function toggleQuery(q) {{
+      activeQueries.has(q) ? activeQueries.delete(q) : activeQueries.add(q);
+      const btn = document.getElementById('qtag-' + q.replace(/ /g,'_'));
+      if (btn) {{
+        btn.className = `text-xs px-2.5 py-1 rounded-full border transition-colors ${{
+          activeQueries.has(q)
+            ? 'border-neutral-200 bg-black text-white'
+            : 'border-neutral-200 bg-white text-neutral-400'
+        }}`;
+      }}
+      filter();
+    }}
+
+    function toggleAllQueries(on) {{
+      activeQueries = on ? new Set(ALL.map(d => d.query)) : new Set();
+      buildQueryGroups();
+      filter();
+    }}
+
+    function toggleSettings() {{
+      const panel = document.getElementById('settings-panel');
+      const backdrop = document.getElementById('settings-backdrop');
+      const open = panel.classList.contains('translate-x-full');
+      panel.classList.toggle('translate-x-full', !open);
+      panel.classList.toggle('translate-x-0', open);
+      backdrop.classList.toggle('hidden', !open);
+    }}
+
+    function resetSettings() {{
+      document.getElementById('minScore').value = 0;
+      document.getElementById('minScoreVal').textContent = '0';
+      document.querySelectorAll('#priceTypeFilters input').forEach(cb => cb.checked = true);
+      toggleAllQueries(true);
+    }}
+
     function saveLikes() {{
       localStorage.setItem('tf_liked', JSON.stringify([...liked]));
       const n = liked.size;
@@ -143,11 +266,9 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       e.stopPropagation();
       liked.has(itemId) ? liked.delete(itemId) : liked.add(itemId);
       saveLikes();
-      // update heart icon in place
       const btn = e.currentTarget;
       btn.innerHTML = heartSvg(liked.has(itemId));
-      btn.classList.toggle('text-black', liked.has(itemId));
-      btn.classList.toggle('text-white', !liked.has(itemId));
+      btn.style.background = liked.has(itemId) ? 'black' : '';
       if (currentTab === 'saved') filter();
     }}
 
@@ -164,14 +285,10 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
         : `<div class="w-full h-48 bg-neutral-100 flex items-center justify-center text-neutral-300 text-4xl">—</div>`;
       return `
         <div class="bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200 group relative">
-          <a href="${{d.url}}" target="_blank" class="block">
-            ${{img}}
-          </a>
-          <button
-            onclick="toggleLike(event, '${{d.rank}}')"
-            class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center transition-colors hover:bg-black/50 ${{isLiked ? 'text-white' : 'text-white'}}"
-            style="${{isLiked ? 'background:black' : ''}}"
-          >
+          <a href="${{d.url}}" target="_blank" class="block">${{img}}</a>
+          <button onclick="toggleLike(event, '${{d.rank}}')"
+            class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center transition-colors hover:bg-black/60 text-white"
+            style="${{isLiked ? 'background:black' : ''}}">
             ${{heartSvg(isLiked)}}
           </button>
           <a href="${{d.url}}" target="_blank" class="p-5 flex flex-col gap-3 flex-1">
@@ -209,19 +326,25 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
 
     function filter() {{
       if (currentTab === 'saved') {{
-        const items = ALL.filter(d => liked.has(d.rank.toString()));
-        render(items);
+        render(ALL.filter(d => liked.has(d.rank.toString())));
         return;
       }}
       const q = document.getElementById('search').value.toLowerCase();
       const sort = document.getElementById('sort').value;
       const maxPrice = parseInt(document.getElementById('maxPrice').value);
       const maxDist = parseInt(document.getElementById('maxDist').value) * 1000;
+      const minScore = parseInt(document.getElementById('minScore').value);
+      const enabledPriceTypes = new Set(
+        [...document.querySelectorAll('#priceTypeFilters input:checked')].map(cb => cb.value)
+      );
 
       let items = ALL.filter(d => {{
         if (q && !d.title.toLowerCase().includes(q) && !d.description.toLowerCase().includes(q)) return false;
         if (d.priceCents > 0 && d.priceCents / 100 > maxPrice) return false;
         if (d.distanceMeters > maxDist) return false;
+        if (d.score < minScore) return false;
+        if (!enabledPriceTypes.has(d.priceType)) return false;
+        if (!activeQueries.has(d.query)) return false;
         return true;
       }});
 
@@ -244,6 +367,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       filter();
     }});
 
+    buildQueryGroups();
     saveLikes();
     filter();
   </script>

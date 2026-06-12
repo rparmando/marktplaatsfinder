@@ -56,6 +56,7 @@ def fetch_page(query: str, offset: int) -> list[dict]:
         if item_id in _seen_ids:
             continue
         _seen_ids.add(item_id)
+        listing["_query"] = query
         filtered.append(listing)
     return filtered
 
