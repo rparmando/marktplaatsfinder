@@ -56,117 +56,83 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     data_json = json.dumps(data, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
-<html lang="nl">
+<html lang="nl" class="bg-white text-black">
 <head>
   <meta charset="utf-8">
   <title>Marktplaats Treasure Finder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f0eb; color: #2c2c2c; min-height: 100vh; }}
-
-    header {{ background: #d95c00; color: white; padding: 18px 24px; display: flex; align-items: center; gap: 12px; }}
-    header h1 {{ font-size: 1.3rem; font-weight: 700; letter-spacing: -0.3px; }}
-    header span {{ font-size: 0.85rem; opacity: 0.85; margin-left: auto; }}
-
-    .controls {{ padding: 16px 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: white; border-bottom: 1px solid #e0d9d0; }}
-    .controls input {{ flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }}
-    .controls select {{ padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; background: white; }}
-    .controls label {{ font-size: 0.85rem; color: #666; display: flex; align-items: center; gap: 6px; }}
-    .controls input[type=range] {{ width: 100px; }}
-    #count {{ font-size: 0.85rem; color: #888; margin-left: auto; white-space: nowrap; }}
-
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; padding: 20px 24px; }}
-
-    .card {{ background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }}
-    .card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.13); }}
-
-    .card-img {{ width: 100%; height: 180px; object-fit: cover; background: #eee; display: block; }}
-    .card-img-placeholder {{ width: 100%; height: 180px; background: #e8e2da; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 2rem; }}
-
-    .card-body {{ padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 6px; }}
-    .card-title {{ font-size: 0.92rem; font-weight: 600; line-height: 1.3; color: #1a1a1a; }}
-    .card-desc {{ font-size: 0.78rem; color: #777; line-height: 1.4; flex: 1; }}
-    .card-meta {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }}
-
-    .badge-score {{ background: #d95c00; color: white; border-radius: 20px; padding: 2px 10px; font-size: 0.78rem; font-weight: 700; }}
-    .badge-score.high {{ background: #2e7d32; }}
-    .badge-score.mid {{ background: #e65100; }}
-    .badge-price {{ background: #fff3e0; color: #bf360c; border-radius: 4px; padding: 2px 7px; font-size: 0.78rem; font-weight: 600; }}
-    .badge-dist {{ background: #e8f5e9; color: #2e7d32; border-radius: 4px; padding: 2px 7px; font-size: 0.78rem; }}
-    .badge-date {{ font-size: 0.75rem; color: #999; margin-left: auto; }}
-
-    .card-link {{ display: block; text-align: center; margin: 10px 14px 12px; padding: 7px; background: #d95c00; color: white; border-radius: 6px; text-decoration: none; font-size: 0.82rem; font-weight: 600; transition: background 0.15s; }}
-    .card-link:hover {{ background: #b84e00; }}
-
-    .rank {{ font-size: 0.7rem; color: #bbb; text-align: right; padding: 6px 10px 0; }}
-
-    #empty {{ display: none; text-align: center; padding: 60px; color: #aaa; font-size: 1rem; grid-column: 1/-1; }}
+    input[type=range] {{ accent-color: black; }}
   </style>
 </head>
-<body>
-  <header>
-    <h1>🔍 Marktplaats Treasure Finder</h1>
-    <span id="count"></span>
+<body class="min-h-screen bg-white text-black font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-black px-6 py-4 flex items-center justify-between">
+    <h1 class="text-sm font-semibold tracking-widest uppercase">Marktplaats Treasure Finder</h1>
+    <span id="count" class="text-xs text-neutral-400"></span>
   </header>
-  <div class="controls">
-    <input type="text" id="search" placeholder="Zoek op titel of omschrijving...">
-    <select id="sort">
-      <option value="score">Sorteer: Score</option>
-      <option value="price_asc">Sorteer: Prijs laag-hoog</option>
-      <option value="price_desc">Sorteer: Prijs hoog-laag</option>
-      <option value="distance">Sorteer: Afstand</option>
+
+  <!-- Controls -->
+  <div class="border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-4 items-center bg-white">
+    <input
+      id="search"
+      type="text"
+      placeholder="Search..."
+      class="flex-1 min-w-48 text-sm border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-black"
+    >
+    <select id="sort" class="text-sm border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-black bg-white">
+      <option value="score">Score</option>
+      <option value="price_asc">Price: low to high</option>
+      <option value="price_desc">Price: high to low</option>
+      <option value="distance">Distance</option>
     </select>
-    <label>Max prijs: €<span id="priceVal">500</span>
-      <input type="range" id="maxPrice" min="0" max="500" step="5" value="500">
+    <label class="text-xs text-neutral-500 flex items-center gap-2">
+      Max €<span id="priceVal" class="text-black font-medium">500</span>
+      <input type="range" id="maxPrice" min="0" max="500" step="5" value="500" class="w-24">
     </label>
-    <label>Max afstand: <span id="distVal">10</span>km
-      <input type="range" id="maxDist" min="1" max="10" step="1" value="10">
+    <label class="text-xs text-neutral-500 flex items-center gap-2">
+      Max <span id="distVal" class="text-black font-medium">10</span>km
+      <input type="range" id="maxDist" min="1" max="10" step="1" value="10" class="w-20">
     </label>
   </div>
-  <div class="grid" id="grid">
-    <div id="empty">Geen resultaten gevonden.</div>
-  </div>
+
+  <!-- Grid -->
+  <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-neutral-200 border-b border-neutral-200"></div>
 
   <script>
     const ALL = {data_json};
-
     const grid = document.getElementById('grid');
-    const emptyMsg = document.getElementById('empty');
     const countEl = document.getElementById('count');
 
-    function scoreClass(s) {{
-      if (s >= 65) return 'high';
-      if (s >= 55) return 'mid';
-      return '';
-    }}
-
     function render(items) {{
-      const cards = items.map(d => {{
+      if (items.length === 0) {{
+        grid.innerHTML = '<p class="col-span-full text-center text-neutral-400 text-sm py-20">No results.</p>';
+        countEl.textContent = '0 results';
+        return;
+      }}
+      grid.innerHTML = items.map(d => {{
         const img = d.thumb
-          ? `<img class="card-img" src="${{d.thumb}}" loading="lazy" alt="">`
-          : `<div class="card-img-placeholder">🪑</div>`;
+          ? `<img src="${{d.thumb}}" loading="lazy" class="w-full h-44 object-cover bg-neutral-100" alt="">`
+          : `<div class="w-full h-44 bg-neutral-100 flex items-center justify-center text-neutral-300 text-3xl">—</div>`;
         return `
-          <div class="card">
-            <div class="rank">#${{d.rank}}</div>
-            <a href="${{d.url}}" target="_blank">${{img}}</a>
-            <div class="card-body">
-              <div class="card-title">${{d.title}}</div>
-              <div class="card-desc">${{d.description}}</div>
-              <div class="card-meta">
-                <span class="badge-score ${{scoreClass(d.score)}}">${{d.score}} pts</span>
-                <span class="badge-price">${{d.price}}</span>
-                <span class="badge-dist">${{d.distance}}</span>
-                <span class="badge-date">${{d.date}}</span>
+          <a href="${{d.url}}" target="_blank" class="bg-white flex flex-col group hover:bg-neutral-50 transition-colors">
+            ${{img}}
+            <div class="p-4 flex flex-col gap-2 flex-1">
+              <p class="text-xs font-semibold leading-snug line-clamp-2 group-hover:underline">${{d.title}}</p>
+              <p class="text-xs text-neutral-400 leading-relaxed line-clamp-2 flex-1">${{d.description}}</p>
+              <div class="flex items-center gap-2 flex-wrap pt-1">
+                <span class="text-xs font-bold tabular-nums">${{d.score}}</span>
+                <span class="text-xs text-neutral-400">·</span>
+                <span class="text-xs font-medium">${{d.price}}</span>
+                <span class="text-xs text-neutral-400">·</span>
+                <span class="text-xs text-neutral-500">${{d.distance}}</span>
+                <span class="text-xs text-neutral-300 ml-auto">${{d.date}}</span>
               </div>
             </div>
-            <a class="card-link" href="${{d.url}}" target="_blank">Bekijk op Marktplaats →</a>
-          </div>`;
+          </a>`;
       }}).join('');
-      grid.innerHTML = cards + '<div id="empty" style="display:none"></div>';
-      countEl.textContent = `${{items.length}} van ${{ALL.length}} resultaten`;
-      if (items.length === 0) {{
-        grid.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;grid-column:1/-1">Geen resultaten gevonden.</div>';
-      }}
+      countEl.textContent = `${{items.length}} of ${{ALL.length}}`;
     }}
 
     function filter() {{
