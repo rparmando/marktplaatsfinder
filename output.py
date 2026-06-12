@@ -83,11 +83,21 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
   <!-- Header -->
   <header class="bg-white/80 backdrop-blur sticky top-0 z-10 border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
     <h1 class="text-sm font-semibold tracking-tight">Treasure Finder</h1>
+    <div class="flex items-center gap-1">
+      <button id="tab-all" onclick="setTab('all')"
+        class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-black text-white">
+        All
+      </button>
+      <button id="tab-saved" onclick="setTab('saved')"
+        class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors text-neutral-400 hover:text-black">
+        Saved <span id="saved-count" class="ml-0.5"></span>
+      </button>
+    </div>
     <span id="count" class="text-xs text-neutral-400 tabular-nums"></span>
   </header>
 
   <!-- Controls -->
-  <div class="bg-white border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-3 items-center">
+  <div id="controls" class="bg-white border-b border-neutral-200 px-6 py-3 flex flex-wrap gap-3 items-center">
     <input
       id="search"
       type="text"
@@ -117,38 +127,92 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     const ALL = {data_json};
     const grid = document.getElementById('grid');
     const countEl = document.getElementById('count');
+    const savedCountEl = document.getElementById('saved-count');
+
+    let liked = new Set(JSON.parse(localStorage.getItem('tf_liked') || '[]'));
+    let currentTab = 'all';
+
+    function saveLikes() {{
+      localStorage.setItem('tf_liked', JSON.stringify([...liked]));
+      const n = liked.size;
+      savedCountEl.textContent = n > 0 ? `(${{n}})` : '';
+    }}
+
+    function toggleLike(e, itemId) {{
+      e.preventDefault();
+      e.stopPropagation();
+      liked.has(itemId) ? liked.delete(itemId) : liked.add(itemId);
+      saveLikes();
+      // update heart icon in place
+      const btn = e.currentTarget;
+      btn.innerHTML = heartSvg(liked.has(itemId));
+      btn.classList.toggle('text-black', liked.has(itemId));
+      btn.classList.toggle('text-white', !liked.has(itemId));
+      if (currentTab === 'saved') filter();
+    }}
+
+    function heartSvg(filled) {{
+      return filled
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z"/></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/></svg>`;
+    }}
+
+    function makeCard(d) {{
+      const isLiked = liked.has(d.rank.toString());
+      const img = d.thumb
+        ? `<img src="${{d.thumb}}" loading="lazy" class="w-full h-48 object-cover" alt="">`
+        : `<div class="w-full h-48 bg-neutral-100 flex items-center justify-center text-neutral-300 text-4xl">—</div>`;
+      return `
+        <div class="bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200 group relative">
+          <a href="${{d.url}}" target="_blank" class="block">
+            ${{img}}
+          </a>
+          <button
+            onclick="toggleLike(event, '${{d.rank}}')"
+            class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center transition-colors hover:bg-black/50 ${{isLiked ? 'text-white' : 'text-white'}}"
+            style="${{isLiked ? 'background:black' : ''}}"
+          >
+            ${{heartSvg(isLiked)}}
+          </button>
+          <a href="${{d.url}}" target="_blank" class="p-5 flex flex-col gap-3 flex-1">
+            <p class="text-sm font-semibold leading-snug line-clamp-2 group-hover:underline decoration-1 underline-offset-2">${{d.title}}</p>
+            <p class="text-xs text-neutral-400 leading-relaxed line-clamp-3 flex-1">${{d.description}}</p>
+            <div class="flex items-center gap-1.5 pt-1 flex-wrap">
+              <span class="text-xs font-bold tabular-nums bg-black text-white px-2 py-0.5 rounded-full">${{d.score}}</span>
+              <span class="text-xs font-semibold text-neutral-700">${{d.price}}</span>
+              <span class="text-xs text-neutral-300">·</span>
+              <span class="text-xs text-neutral-400">${{d.distance}}</span>
+              <span class="text-xs text-neutral-300 ml-auto">${{d.date}}</span>
+            </div>
+          </a>
+        </div>`;
+    }}
 
     function render(items) {{
       if (items.length === 0) {{
-        grid.innerHTML = '<p class="col-span-full text-center text-neutral-400 text-sm py-24">No results found.</p>';
+        const msg = currentTab === 'saved' ? 'No saved items yet.' : 'No results found.';
+        grid.innerHTML = `<p class="col-span-full text-center text-neutral-400 text-sm py-24">${{msg}}</p>`;
         countEl.textContent = '0 results';
         return;
       }}
-      grid.innerHTML = items.map(d => {{
-        const img = d.thumb
-          ? `<img src="${{d.thumb}}" loading="lazy" class="w-full h-48 object-cover" alt="">`
-          : `<div class="w-full h-48 bg-neutral-100 flex items-center justify-center text-neutral-300 text-4xl">—</div>`;
-        return `
-          <a href="${{d.url}}" target="_blank"
-             class="bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200 group">
-            ${{img}}
-            <div class="p-5 flex flex-col gap-3 flex-1">
-              <p class="text-sm font-semibold leading-snug line-clamp-2 group-hover:underline decoration-1 underline-offset-2">${{d.title}}</p>
-              <p class="text-xs text-neutral-400 leading-relaxed line-clamp-3 flex-1">${{d.description}}</p>
-              <div class="flex items-center gap-1.5 pt-1 flex-wrap">
-                <span class="text-xs font-bold tabular-nums bg-black text-white px-2 py-0.5 rounded-full">${{d.score}}</span>
-                <span class="text-xs font-semibold text-neutral-700">${{d.price}}</span>
-                <span class="text-xs text-neutral-300">·</span>
-                <span class="text-xs text-neutral-400">${{d.distance}}</span>
-                <span class="text-xs text-neutral-300 ml-auto">${{d.date}}</span>
-              </div>
-            </div>
-          </a>`;
-      }}).join('');
-      countEl.textContent = `${{items.length}} of ${{ALL.length}}`;
+      grid.innerHTML = items.map(makeCard).join('');
+      countEl.textContent = `${{items.length}} of ${{currentTab === 'saved' ? liked.size : ALL.length}}`;
+    }}
+
+    function setTab(tab) {{
+      currentTab = tab;
+      document.getElementById('tab-all').className = `text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${{tab === 'all' ? 'bg-black text-white' : 'text-neutral-400 hover:text-black'}}`;
+      document.getElementById('tab-saved').className = `text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${{tab === 'saved' ? 'bg-black text-white' : 'text-neutral-400 hover:text-black'}}`;
+      document.getElementById('controls').style.display = tab === 'saved' ? 'none' : '';
+      filter();
     }}
 
     function filter() {{
+      if (currentTab === 'saved') {{
+        const items = ALL.filter(d => liked.has(d.rank.toString()));
+        render(items);
+        return;
+      }}
       const q = document.getElementById('search').value.toLowerCase();
       const sort = document.getElementById('sort').value;
       const maxPrice = parseInt(document.getElementById('maxPrice').value);
@@ -180,6 +244,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       filter();
     }});
 
+    saveLikes();
     filter();
   </script>
 </body>
