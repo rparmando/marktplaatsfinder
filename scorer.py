@@ -54,6 +54,8 @@ def _gem_score(text: str) -> int:
 
 
 def _price_score(price: float, price_type: str) -> int:
+    if price_type == "FREE" or (price_type == "FIXED" and price == 0):
+        return 25
     if price_type == "FAST_BID" and price == 0:
         return 10
     if 5 <= price <= 50:

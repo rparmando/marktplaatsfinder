@@ -44,7 +44,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             "description": listing.get("description", "")[:200],
             "price": _format_price(listing),
             "priceCents": listing.get("priceInfo", {}).get("priceCents", 0),
-            "priceType": listing.get("priceInfo", {}).get("priceType", "FIXED"),
+            "priceType": _normalize_price_type(listing.get("priceInfo", {})),
             "distance": _format_distance(listing),
             "distanceMeters": listing.get("location", {}).get("distanceMeters", 99999),
             "city": listing.get("location", {}).get("cityName", ""),
@@ -153,6 +153,9 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     <div class="px-5 py-4 border-b border-neutral-100">
       <p class="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-3">Price type</p>
       <div class="flex flex-col gap-2" id="priceTypeFilters">
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" value="FREE" checked onchange="filter()" class="rounded"> Gratis
+        </label>
         <label class="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" value="FIXED" checked onchange="filter()" class="rounded"> Fixed price
         </label>
@@ -434,7 +437,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
                 description: (d.description || '').slice(0, 200),
                 price: formatPrice(d),
                 priceCents: (d.priceInfo || {{}}).priceCents || 0,
-                priceType: (d.priceInfo || {{}}).priceType || 'FIXED',
+                priceType: normalizePriceType(d.priceInfo),
                 distance: formatDist(d),
                 distanceMeters: (d.location || {{}}).distanceMeters || 99999,
                 city: (d.location || {{}}).cityName || '',
@@ -463,9 +466,17 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     function formatPrice(d) {{
       const info = d.priceInfo || {{}};
       const cents = info.priceCents || 0;
-      if (info.priceType === 'FAST_BID' && cents === 0) return '€0 (bid)';
-      if (info.priceType === 'MIN_BID') return `€${{Math.floor(cents/100)}} (bod)`;
+      const pt = info.priceType || 'FIXED';
+      if (pt === 'FREE' || (pt === 'FIXED' && cents === 0)) return 'Gratis';
+      if (pt === 'FAST_BID' && cents === 0) return '€0 (bid)';
+      if (pt === 'MIN_BID') return `€${{Math.floor(cents/100)}} (bod)`;
       return `€${{Math.floor(cents/100)}}`;
+    }}
+
+    function normalizePriceType(info) {{
+      const pt = (info || {{}}).priceType || 'FIXED';
+      const cents = (info || {{}}).priceCents || 0;
+      return (pt === 'FREE' || (pt === 'FIXED' && cents === 0)) ? 'FREE' : pt;
     }}
 
     function formatDist(d) {{
@@ -485,10 +496,20 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     console.print(f"[dim]Saved HTML to {OUTPUT_HTML}[/dim]")
 
 
+def _normalize_price_type(price_info: dict) -> str:
+    pt = price_info.get("priceType", "FIXED")
+    cents = price_info.get("priceCents", 0)
+    if pt == "FREE" or (pt == "FIXED" and cents == 0):
+        return "FREE"
+    return pt
+
+
 def _format_price(listing: dict) -> str:
     price_info = listing.get("priceInfo", {})
-    price_type = price_info.get("priceType", "")
+    price_type = _normalize_price_type(price_info)
     cents = price_info.get("priceCents", 0)
+    if price_type == "FREE":
+        return "Gratis"
     if price_type == "FAST_BID" and cents == 0:
         return "€0 (bid)"
     if price_type == "MIN_BID":
