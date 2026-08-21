@@ -53,6 +53,9 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             "date": listing.get("date", ""),
             "seller": listing.get("sellerInformation", {}).get("sellerName", ""),
             "query": listing.get("_query", ""),
+            "ai_reason": listing.get("_ai_reason", ""),
+            "market_value": listing.get("_market_value", ""),
+            "breakdown": listing.get("_breakdown", {}),
         })
 
     data_json = json.dumps(data, ensure_ascii=False)
@@ -175,6 +178,21 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
         <button onclick="toggleAllQueries(true)" class="text-xs text-neutral-400 hover:text-black">All</button>
       </div>
       <div class="space-y-3" id="queryGroups"></div>
+
+      <!-- Custom query input -->
+      <div class="mt-3 pt-3 border-t border-neutral-100">
+        <p class="text-xs text-neutral-400 mb-2">Add a search term</p>
+        <div class="flex gap-2">
+          <input id="custom-query-input" type="text" placeholder="e.g. rookglas"
+            class="flex-1 text-xs bg-neutral-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/10 placeholder:text-neutral-300"
+            onkeydown="if(event.key==='Enter') addCustomQuery()">
+          <button onclick="addCustomQuery()"
+            class="text-xs font-semibold bg-black text-white rounded-lg px-3 py-2 hover:bg-neutral-700 transition-colors whitespace-nowrap">
+            Add
+          </button>
+        </div>
+        <div id="custom-query-status" class="text-xs mt-1.5 hidden"></div>
+      </div>
     </div>
 
     <!-- Run button (only shown when server is available) -->
@@ -215,27 +233,60 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       {{ label: 'Style', queries: ['vintage', 'retro', 'industrieel', 'Deens design'] }},
       {{ label: 'Material', queries: ['teak', 'antiek'] }},
       {{ label: 'Era', queries: ['jaren 60', 'jaren 70'] }},
+      {{ label: 'Art', queries: ['schilderij', 'kunstwerk', 'aquarel', 'sculptuur', 'beeld', 'beeldje', 'bronzen beeld', 'wanddecoratie', 'wandobject', 'wandsculptuur'] }},
+      {{ label: 'Decoratie', queries: ['vaas', 'keramiek', 'aardewerk', 'steengoed', 'kandelaar', 'kaarsenhouder', 'kandelaars', 'dienblad', 'tray', 'serveerschaal', 'onderzetter', 'kurk onderzetter', 'decoratie', 'brocante', 'curiosa', 'olieverfschilij'] }},
     ];
 
-    let activeQueries = new Set(ALL.map(d => d.query));
+    // #5 — restore persisted query prefs, fall back to all queries in current results
+    const _allKnownQueries = new Set(ALL.map(d => d.query));
+    const _saved = localStorage.getItem('tf_active_queries');
+    let activeQueries = _saved
+      ? new Set(JSON.parse(_saved).filter(q => _allKnownQueries.has(q) || true))
+      : new Set(_allKnownQueries);
+
+    function saveQueryPrefs() {{
+      localStorage.setItem('tf_active_queries', JSON.stringify([...activeQueries]));
+    }}
+
+    // #2 — compute per-query stats from current results
+    function queryStats() {{
+      const stats = {{}};
+      for (const d of ALL) {{
+        if (!stats[d.query]) stats[d.query] = {{ count: 0, total: 0 }};
+        stats[d.query].count++;
+        stats[d.query].total += d.score;
+      }}
+      return stats;
+    }}
 
     function buildQueryGroups() {{
+      const stats = queryStats();
       const container = document.getElementById('queryGroups');
       container.innerHTML = QUERY_GROUPS.map(group => `
         <div>
           <p class="text-xs text-neutral-400 mb-1.5">${{group.label}}</p>
           <div class="flex flex-wrap gap-1.5">
-            ${{group.queries.map(q => `
-              <button onclick="toggleQuery('${{q}}')" id="qtag-${{q.replace(/ /g,'_')}}"
-                class="text-xs px-2.5 py-1 rounded-full border border-neutral-200 bg-black text-white transition-colors">
-                ${{q}}
-              </button>`).join('')}}
+            ${{group.queries.map(q => {{
+              const s = stats[q];
+              const badge = s
+                ? `<span class="ml-1 opacity-60 font-normal">${{s.count}} · ${{Math.round(s.total/s.count)}}</span>`
+                : '';
+              const active = activeQueries.has(q);
+              return `<button onclick="toggleQuery('${{q}}')" id="qtag-${{q.replace(/ /g,'_')}}"
+                class="text-xs px-2.5 py-1 rounded-full border transition-colors ${{
+                  active ? 'border-neutral-200 bg-black text-white' : 'border-neutral-200 bg-white text-neutral-400'
+                }}">${{q}}${{badge}}</button>`;
+            }}).join('')}}
           </div>
         </div>`).join('');
     }}
 
     function toggleQuery(q) {{
       activeQueries.has(q) ? activeQueries.delete(q) : activeQueries.add(q);
+      saveQueryPrefs();
+      const stats = queryStats();
+      const s = stats[q];
+      const badge = s ? `<span class="ml-1 opacity-60 font-normal">${{s.count}} · ${{Math.round(s.total/s.count)}}</span>` : '';
       const btn = document.getElementById('qtag-' + q.replace(/ /g,'_'));
       if (btn) {{
         btn.className = `text-xs px-2.5 py-1 rounded-full border transition-colors ${{
@@ -243,14 +294,88 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             ? 'border-neutral-200 bg-black text-white'
             : 'border-neutral-200 bg-white text-neutral-400'
         }}`;
+        btn.innerHTML = q + badge;
       }}
       filter();
     }}
 
     function toggleAllQueries(on) {{
       activeQueries = on ? new Set(ALL.map(d => d.query)) : new Set();
+      saveQueryPrefs();
       buildQueryGroups();
       filter();
+    }}
+
+    // Custom queries added this session (not in QUERY_GROUPS)
+    const customQueries = JSON.parse(localStorage.getItem('tf_custom_queries') || '[]');
+
+    function renderCustomGroup() {{
+      const existing = document.getElementById('custom-group');
+      if (existing) existing.remove();
+      if (customQueries.length === 0) return;
+      const stats = queryStats();
+      const container = document.getElementById('queryGroups');
+      const div = document.createElement('div');
+      div.id = 'custom-group';
+      div.innerHTML = `
+        <p class="text-xs text-neutral-400 mb-1.5">Custom</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${{customQueries.map(q => {{
+            const s = stats[q];
+            const badge = s ? `<span class="ml-1 opacity-60 font-normal">${{s.count}} · ${{Math.round(s.total/s.count)}}</span>` : '';
+            const active = activeQueries.has(q);
+            return `<button onclick="toggleQuery('${{q}}')" id="qtag-${{q.replace(/ /g,'_')}}"
+              class="text-xs px-2.5 py-1 rounded-full border transition-colors ${{active ? 'border-neutral-200 bg-black text-white' : 'border-neutral-200 bg-white text-neutral-400'}}">${{q}}${{badge}}</button>`;
+          }}).join('')}}
+        </div>`;
+      container.prepend(div);
+    }}
+
+    function addCustomQuery() {{
+      const input = document.getElementById('custom-query-input');
+      const statusEl = document.getElementById('custom-query-status');
+      const q = input.value.trim().toLowerCase();
+      if (!q) return;
+
+      // Add to session
+      if (!customQueries.includes(q)) {{
+        customQueries.push(q);
+        localStorage.setItem('tf_custom_queries', JSON.stringify(customQueries));
+      }}
+      activeQueries.add(q);
+      saveQueryPrefs();
+      renderCustomGroup();
+      input.value = '';
+
+      // Try to persist to config.py via server
+      if (serverAvailable) {{
+        statusEl.textContent = 'Saving…';
+        statusEl.className = 'text-xs mt-1.5 text-neutral-400';
+        statusEl.classList.remove('hidden');
+        fetch(API + '/api/add-query', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{ query: q }})
+        }}).then(r => r.json()).then(data => {{
+          if (data.ok) {{
+            statusEl.textContent = `✓ "${{q}}" saved to config`;
+            statusEl.className = 'text-xs mt-1.5 text-emerald-600';
+          }} else {{
+            statusEl.textContent = data.error || 'Saved for this session only';
+            statusEl.className = 'text-xs mt-1.5 text-neutral-400';
+          }}
+          setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        }}).catch(() => {{
+          statusEl.textContent = 'Session only (server unavailable)';
+          statusEl.className = 'text-xs mt-1.5 text-neutral-400';
+          setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        }});
+      }} else {{
+        statusEl.textContent = 'Added for this session';
+        statusEl.className = 'text-xs mt-1.5 text-neutral-400';
+        statusEl.classList.remove('hidden');
+        setTimeout(() => statusEl.classList.add('hidden'), 2000);
+      }}
     }}
 
     function toggleSettings() {{
@@ -266,6 +391,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
       document.getElementById('minScore').value = 0;
       document.getElementById('minScoreVal').textContent = '0';
       document.querySelectorAll('#priceTypeFilters input').forEach(cb => cb.checked = true);
+      localStorage.removeItem('tf_active_queries');
       toggleAllQueries(true);
     }}
 
@@ -309,12 +435,30 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             <p class="text-sm font-semibold leading-snug line-clamp-2 group-hover:underline decoration-1 underline-offset-2">${{d.title}}</p>
             <p class="text-xs text-neutral-400 leading-relaxed line-clamp-3 flex-1">${{d.description}}</p>
             <div class="flex items-center gap-1.5 pt-1 flex-wrap">
-              <span class="text-xs font-bold tabular-nums bg-black text-white px-2 py-0.5 rounded-full">${{d.score}}</span>
+              <span class="score-badge relative group/score text-xs font-bold tabular-nums bg-black text-white px-2 py-0.5 rounded-full cursor-default select-none">
+                ${{d.score}}
+                ${{d.breakdown && Object.keys(d.breakdown).length ? `
+                <span class="pointer-events-none absolute bottom-full left-0 mb-2 w-44 rounded-xl bg-neutral-900 text-white text-xs p-3 shadow-xl opacity-0 group-hover/score:opacity-100 transition-opacity duration-150 z-50">
+                  <span class="block font-semibold mb-1.5 text-neutral-300">Score breakdown</span>
+                  ${{[
+                    ['Urgency',  d.breakdown.urgency],
+                    ['Gem',      d.breakdown.gem],
+                    ['Price',    d.breakdown.price],
+                    ['Proximity',d.breakdown.proximity],
+                    ['Penalty',  d.breakdown.penalty],
+                    ['AI bonus', d.breakdown.ai],
+                  ].filter(([,v]) => v !== undefined && v !== 0).map(([label, val]) =>
+                    `<span class="flex justify-between gap-2"><span class="text-neutral-400">${{label}}</span><span class="${{val < 0 ? 'text-red-400' : 'text-green-400'}}">${{val > 0 ? '+' : ''}}${{val}}</span></span>`
+                  ).join('')}}
+                </span>` : ''}}
+              </span>
               <span class="text-xs font-semibold text-neutral-700">${{d.price}}</span>
+              ${{d.market_value ? `<span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">≈ ${{d.market_value}}</span>` : ''}}
               <span class="text-xs text-neutral-300">·</span>
               <span class="text-xs text-neutral-400">${{d.distance}}</span>
               <span class="text-xs text-neutral-300 ml-auto">${{d.date}}</span>
             </div>
+            ${{d.ai_reason ? `<p class="text-xs text-amber-600 italic px-5 pb-4 -mt-1 line-clamp-2">✦ ${{d.ai_reason}}</p>` : ''}}
           </a>
         </div>`;
     }}
@@ -446,6 +590,9 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
                 date: d.date || '',
                 seller: (d.sellerInformation || {{}}).sellerName || '',
                 query: d._query || '',
+                ai_reason: d._ai_reason || '',
+                market_value: d._market_value || '',
+                breakdown: d._breakdown || {{}},
               }});
             }});
             const label = document.getElementById('run-label');
@@ -455,8 +602,11 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
             status.textContent = `Done — ${{ALL.length}} results loaded.`;
             btn.disabled = false;
             btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            activeQueries = new Set(ALL.map(d => d.query));
+            // after a fresh run, add any new queries to activeQueries and persist
+            ALL.map(d => d.query).forEach(q => activeQueries.add(q));
+            saveQueryPrefs();
             buildQueryGroups();
+            renderCustomGroup();
             filter();
           }});
         }}
@@ -485,6 +635,7 @@ def save_html(listings: list[dict], top_n: int = 50) -> None:
     }}
 
     buildQueryGroups();
+    renderCustomGroup();
     saveLikes();
     filter();
   </script>

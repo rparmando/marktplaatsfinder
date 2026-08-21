@@ -8,14 +8,23 @@ def score_listing(listing: dict) -> int:
     condition = _attribute(listing, "condition")
     delivery = _attribute(listing, "delivery")
 
-    score = 0
-    score += _urgency_score(text, traits, price_type)
-    score += _gem_score(text)
-    score += _price_score(price, price_type)
-    score += _proximity_score(distance, delivery)
-    score -= _penalties(text, traits, condition, price)
+    urgency = _urgency_score(text, traits, price_type)
+    gem = _gem_score(text)
+    price_pts = _price_score(price, price_type)
+    proximity = _proximity_score(distance, delivery)
+    penalty = _penalties(text, traits, condition, price)
 
-    return max(0, min(100, score))
+    total = max(0, min(100, urgency + gem + price_pts + proximity - penalty))
+
+    listing["_breakdown"] = {
+        "urgency": urgency,
+        "gem": gem,
+        "price": price_pts,
+        "proximity": proximity,
+        "penalty": -penalty,
+    }
+
+    return total
 
 
 def _urgency_score(text: str, traits: list, price_type: str) -> int:
@@ -46,6 +55,13 @@ def _gem_score(text: str) -> int:
         "jaren 60": 8, "jaren 70": 6, "jaren 80": 4,
         "vintage": 5, "retro": 4, "antiek": 6,
         "messing": 6, "gietijzer": 7, "emaille": 6,
+        # Art & accessories
+        "schilderij": 7, "olieverf": 8, "aquarel": 7, "kunstwerk": 6,
+        "sculptuur": 8, "bronzen beeld": 10, "beeldje": 5, "beeld": 5,
+        "keramiek": 6, "aardewerk": 6, "steengoed": 7,
+        "kandelaar": 5, "kaarsenhouder": 4,
+        "dienblad": 4, "serveerschaal": 4,
+        "brocante": 6, "curiosa": 7,
     }
     for kw, pts in keywords.items():
         if kw in text:
